@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Path Planning Demo</title>
+    <style>
+         /* Center the content vertically and horizontally */
+         body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        /* Style the button container to display buttons in a row */
+        .button-container {
+            display: flex;
+            margin-top: 10px; /* Set the vertical gap after the container */
+            gap: 10px; /* Adjust the gap between buttons as needed */
+        }
+
+        .grid-container {
+            margin-top: 10px; /* Set the vertical gap after the container */
+            width: 100%; /* Set a specific width or a percentage as needed */
+            overflow-x: auto; /* Enable horizontal scrolling when content overflows */
+            display: flex; /* Add a flex container */
+            justify-content: center; /* Center content horizontally */
+        }
+
+        .row {
+            white-space: nowrap; /* Prevent cells from wrapping to the next line */
+        }
+
+        .cell {
+            width: 10px;
+            height: 10px;
+            border: 1px solid #ccc;
+            display: inline-block;
+        }
+        .start {
+            background-color: rgb(156, 243, 147);
+        }
+        .goal {
+            background-color: rgb(255, 150, 150);
+        }
+        .obstacle {
+            background-color: rgb(126, 126, 126);
+        }
+        .path {
+            background-color: rgb(136, 174, 255);
+        }
+    </style>
+</head>
+<body>
+    <!--  <h1>Path Planning</h1>  -->
+    <!-- Container for buttons with the ID 'button-container' -->
+    <div class="button-container">
+        <label for="row-count">Rows:</label>
+        <input type="number" id="row-count" min="1" max="40" value="25">
+        <label for="column-count">Columns:</label>
+        <input type="number" id="column-count" min="1" max="80" value="60">
+        <button id="create-grid">Create Grid</button>
+    </div>
+
+    <div class="button-container">
+        <label for="obstacle-count">Obstacles:</label>
+        <input type="number" id="obstacle-count" min="1" max="500" value="30">
+        <button id="add-obstacles">Add Obstacles</button> 
+    </div> 
+    
+    <div class="button-container">
+        <button id="reset">Reset</button>
+        <button id="define-start">Set Start</button>
+        <button id="define-goal">Set Goal</button>
+    </div>
+
+     <!-- Dropdown menu for path planner selection -->
+     <div class="button-container">
+        <select id="path-planner">
+            <option value="moar-planner">MOAR Planner</option>
+            <option value="astar">A*</option>
+        </select>
+        <button id="compute">Compute Path</button>
+    </div>
+
+    <div class="button-container" id="moar-costs-container">
+        <label for="k1">k1 (Safety):</label>
+        <input type="range" id="k1" min="0" max="1" step="0.05" value="0.44">
+        <span id="k1-value">0.44</span>
+
+        <label for="k2">k2 (Time):</label>
+        <input type="range" id="k2" min="0" max="1" step="0.05" value="0.28">
+        <span id="k2-value">0.28</span>
+
+        <label for="k3">k3 (Energy):</label>
+        <input type="range" id="k3" min="0" max="1" step="0.05" value="0.28">
+        <span id="k3-value">0.28</span>
+    </div>
+
+    <div class="button-container" id="moar-safety-container"> 
+        <label for="collision-min-dist">Collision Min. Dist.:</label>
+        <input type="range" id="collision-min-dist" min="0" max="10" step="0.5" value="1">
+        <span id="collision-min-dist-value">1</span>
+
+        <label for="collision-max-dist">Collision Max. Dist.:</label>
+        <input type="range" id="collision-max-dist" min="0" max="20" step="0.5" value="5">
+        <span id="collision-max-dist-value">5</span>
+
+        <button id="toggle-safety-cost">Toggle Safety Map</button>
+    </div>
+    
+    <div class="grid-container">
+        <div id="map">
+        <!-- Your grid will be dynamically created here. -->
+        </div>
+    </div>
+    
+    <script>
+
+        // Priority Queue implementation
+        class PriorityQueue {
+            constructor() {
+                this.items = [];
+            }
+
+            // Method to enqueue an item with a priority
+            enqueue(item, priority) {
+                const queueElement = { item, priority };
+                let added = false;
+                for (let i = 0; i < this.items.length; i++) {
+                    if (queueElement.priority < this.items[i].priority) {
+                        this.items.splice(i, 0, queueElement);
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added) {
+                    this.items.push(queueElement);
+                }
+            }
+
+            // Method to dequeue the item with the highest priority
+            dequeue() {
+                if (this.isEmpty()) {
+                    return null;
+                }
+                return this.items.shift().item;
+            }
+
+            // Method to check if the queue is empty
+            isEmpty() {
+                return this.items.length === 0;
+            }
+
+            // Method to check if the queue contains a specific item
+            contains(item) {
+                for (const queueElement of this.items) {
+                    if (queueElement.item === item) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        }
+
+        // JavaScript code to handle the functionality
+        let gridSize = { rows: 5, columns: 5 };
+        let startCell = null;
+        let goalCell = null;
+        let safetyCost = {};
+        let collisionMinDist = 1;
+        let collisionMaxDist = 6;
+        let energyTable = [];
+        const heuristicTable = {};
+        // Define a mapping of directions to velocity 
+        const directionToVelocity = {
+            0: { vx: 0, vy: 0 }, // No velocity
+            1: { vx: 0, vy: -1 }, // N
+            2: { vx: 0.70710678118, vy: -0.70710678118 }, // NE
+            3: { vx: 1, vy: 0 },  // E
+            4: { vx: 0.70710678118, vy: 0.70710678118 },  // SE
+            5: { vx: 0, vy: 1 },  // S
+            6: { vx: -0.70710678118, vy: 0.70710678118 }, // SW
+            7: { vx: -1, vy: 0 }, // W
+            8: { vx: -0.70710678118, vy: -0.70710678118 }, // NW
+        };
+        
+
+        // Add an event listener to the path planner dropdown
+        document.getElementById("path-planner").addEventListener("change", function () {
+            const selectedPlanner = this.value;
+            const moarCostContainer = document.getElementById("moar-costs-container");
+            const moarSafetyContainer = document.getElementById("moar-safety-container");
+
+            if (selectedPlanner === "moar-planner") {
+                // If MOAR Planner is selected, show the buttons
+                moarCostContainer.style.display = "block";
+                moarSafetyContainer.style.display = "block";
+            } else {
+                // If another planner is selected, hide the buttons
+                moarCostContainer.style.display = "none";
+                moarSafetyContainer.style.display = "none";
+            }
+        });
+
+
+        document.getElementById("create-grid").addEventListener("click", function() {
+            createGrid();
+            resetSafetyMap();
+        });
+
+        // Function to create the grid based on user input
+        function createGrid() {
+            const rowCount = parseInt(document.getElementById("row-count").value, 10);
+            const columnCount = parseInt(document.getElementById("column-count").value, 10);
+
+            if (isNaN(rowCount) || isNaN(columnCount) || rowCount < 1 || columnCount < 1) {
+                alert("Please enter valid row and column counts.");
+                return;
+            }
+
+            gridSize = { rows: rowCount, columns: columnCount };
+
+            // Remove the existing grid
+            document.getElementById("map").innerHTML = '';
+
+            // Initialize the new grid
+            for (let i = 0; i < gridSize.rows; i++) {
+                const row = document.createElement("div");
+                row.classList.add("row");
+                for (let j = 0; j < gridSize.columns; j++) {
+                    const cell = document.createElement("div");
+                    cell.classList.add("cell");
+                    cell.id = `cell-${i}-${j}`;
+                    row.appendChild(cell);
+
+                    for (let k = 0; k < 9; k++) {
+                        const cell3 = document.createElement("div");
+                        cell3.classList.add("cell3");
+                        cell3.id = `cell-${i}-${j}-${k}`;
+                        cell.appendChild(cell3);
+                    }
+                }
+                document.getElementById("map").appendChild(row);
+            }
+
+            // Reset the map
+            resetMap();
+        }
+
+        document.getElementById("reset").addEventListener("click", function() {
+            resetMap();
+            resetSafetyMap();
+        });
+
+        document.getElementById("define-start").addEventListener("click", function() {
+            // Reset the path by removing the "path" class from all cells
+            const pathCells = document.getElementsByClassName("path");
+            for (let i = pathCells.length - 1; i >= 0; i--) {
+                pathCells[i].classList.remove("path");
+            }
+
+            // Allow the user to define the start position on the map
+            setStart();
+            resetSafetyMap();
+        });
+
+        document.getElementById("define-goal").addEventListener("click", function() {
+            // Reset the path by removing the "path" class from all cells
+            const pathCells = document.getElementsByClassName("path");
+            for (let i = pathCells.length - 1; i >= 0; i--) {
+                pathCells[i].classList.remove("path");
+            }
+
+            // Allow the user to define the goal position on the map
+            setGoal();
+            resetSafetyMap();
+        });
+
+        document.getElementById("compute").addEventListener("click", function() {
+            resetSafetyMap();
+            // Reset the path by removing the "path" class from all cells
+            const pathCells = document.getElementsByClassName("path");
+            for (let i = pathCells.length - 1; i >= 0; i--) {
+                pathCells[i].classList.remove("path");
+            }
+            togglePath.isShown = false;
+
+            // Implement the selected path planner
+            const selectedPlanner = document.getElementById("path-planner").value;
+            if (selectedPlanner === "astar") {
+                // Call the A* path planner function
+                computeAStarPath();
+                togglePath.isShown = true;
+            } else if (selectedPlanner === "moar-planner") {
+                // Call the MOAR Planner function
+                computeMOARPath();
+                togglePath.isShown = true;
+            } else {
+                alert("Please select a valid path planner.");
+            }
+        });
+
+        const togglePath = { isShown: false };
+
+        // Add event listeners for input elements
+        document.getElementById("collision-min-dist").addEventListener("input", function () {
+            const collisionMinDistValue = parseFloat(this.value).toFixed(1);
+            document.getElementById("collision-min-dist-value").textContent = collisionMinDistValue;
+            updateSafetyMap();
+        });
+
+        document.getElementById("collision-max-dist").addEventListener("input", function () {
+            const collisionMaxDistValue = parseFloat(this.value).toFixed(1);
+            document.getElementById("collision-max-dist-value").textContent = collisionMaxDistValue;
+            updateSafetyMap();
+        });
+
+        document.getElementById("k1").addEventListener("input", function () {
+            const k1Value = parseFloat(this.value).toFixed(2);
+            document.getElementById("k1-value").textContent = k1Value;
+            updateMoarPath();
+        });
+
+        document.getElementById("k2").addEventListener("input", function () {
+            const k2Value = parseFloat(this.value).toFixed(2);
+            document.getElementById("k2-value").textContent = k2Value;
+            updateMoarPath();
+        });
+
+        document.getElementById("k3").addEventListener("input", function () {
+            const k3Value = parseFloat(this.value).toFixed(2);
+            document.getElementById("k3-value").textContent = k3Value;
+            updateMoarPath();
+        });
+        
+
+        // Function to toggle the safety cost map visibility
+        function toggleSafetyCostMap() {
+            computeSafetyMap();
+            const freeCells = document.querySelectorAll(".cell:not(.obstacle):not(.start):not(.goal):not(.path)");
+            
+            for (const cell of freeCells) {
+                const safety = safetyCost[cell.id];
+                const red = Math.round(255 * safety); // Calculate the red component
+                const green = 255 - red; // Calculate the green component (complement to create white)
+
+                // Set the cell's background color with the RGB values
+                // cell.style.backgroundColor = `rgb(${red}, ${green}, ${green})`;
+                cell.style.backgroundColor = `rgb(255, ${green}, ${green})`;
+            }
+        }
+
+        // Function to reset the safety map
+        function resetSafetyMap() {
+            const freeCells = document.querySelectorAll(".cell:not(.obstacle):not(.start):not(.goal):not(.path)");
+
+            for (const cell of freeCells) {
+                cell.style.backgroundColor = ""; // Reset cell color
+            }
+            toggleSafetyCostMap.isShown = false;
+        }
+
+        // Function to update the moar path
+        function updateMoarPath() {
+            if (togglePath.isShown) {
+                resetSafetyMap();
+                // Reset the path by removing the "path" class from all cells
+                const pathCells = document.getElementsByClassName("path");
+                for (let i = pathCells.length - 1; i >= 0; i--) {
+                    pathCells[i].classList.remove("path");
+                }
+                computeMOARPath();
+            }
+        }
+
+        // Function to update the safety map
+        function updateSafetyMap() {
+            const freeCells = document.querySelectorAll(".cell:not(.obstacle):not(.start):not(.goal):not(.path)");
+
+            for (const cell of freeCells) {
+                cell.style.backgroundColor = ""; // Reset cell color
+            }
+
+             // Toggle the visibility of the safety cost map
+            if (toggleSafetyCostMap.isShown) {
+                toggleSafetyCostMap();
+            }
+        }
+
+        // Add an event listener to the toggle button
+        document.getElementById("toggle-safety-cost").addEventListener("click", function () {
+            const freeCells = document.querySelectorAll(".cell:not(.obstacle):not(.start):not(.goal):not(.path)");
+
+            for (const cell of freeCells) {
+                cell.style.backgroundColor = ""; // Reset cell color
+            }
+
+             // Toggle the visibility of the safety cost map
+            if (toggleSafetyCostMap.isShown) {
+                toggleSafetyCostMap.isShown = false;
+            } else {
+                toggleSafetyCostMap();
+                toggleSafetyCostMap.isShown = true;
+            }
+        });
+
+        toggleSafetyCostMap.isShown = false;
+
+        document.getElementById("add-obstacles").addEventListener("click", function() {
+            // Reset the path by removing the "path" class from all cells
+            const pathCells = document.getElementsByClassName("path");
+            for (let i = pathCells.length - 1; i >= 0; i--) {
+                pathCells[i].classList.remove("path");
+            }
+            togglePath.isShown = false;
+            
+            const obstacleCount = parseInt(document.getElementById("obstacle-count").value, 10);
+            if (isNaN(obstacleCount) || obstacleCount < 0) {
+                alert("Please enter a valid number of obstacles.");
+                return;
+            }
+
+            // Reset the map with the specified number of obstacles
+            resetMap();
+            resetSafetyMap();
+            addObstacles(obstacleCount);
+            computeSafetyMap();
+        });
+
+
+        // Function to add the specified number of obstacles
+        function addObstacles(count) {
+            for (let i = 0; i < count; i++) {
+                const randomCell = getRandomEmptyCell();
+                if (randomCell) {
+                    randomCell.classList.add("obstacle");
+                }
+            }
+        }
+
+        
+        // Function to reset the map with obstacles at random positions
+        function resetMap() {
+            // Reset the start and goal positions
+            startCell = null;
+            goalCell = null;
+            
+            // Clear the map
+            const cells = document.getElementsByClassName("cell");
+            for (let i = 0; i < cells.length; i++) {
+                cells[i].classList.remove("obstacle", "start", "goal", "path");
+            }
+            togglePath.isShown = false;
+        }
+
+        // Function to allow the user to define the start position
+        function setStart() {
+            if (startCell) {
+                startCell.classList.remove("start");
+            }
+            
+            startCell = getRandomEmptyCell();
+            
+            if (startCell) {
+                startCell.classList.add("start");
+            }
+        }
+
+        // Function to allow the user to define the goal position
+        function setGoal() {
+            if (goalCell) {
+                goalCell.classList.remove("goal");
+            }
+            
+            goalCell = getRandomEmptyCell();
+            
+            if (goalCell) {
+                goalCell.classList.add("goal");
+                precomputeHeuristics();
+            }
+        }
+
+        // Function to get a random empty cell for start and goal positions
+        function getRandomEmptyCell() {
+            const emptyCells = document.querySelectorAll(".cell:not(.obstacle):not(.start):not(.goal)");
+            if (emptyCells.length > 0) {
+                const randomIndex = Math.floor(Math.random() * emptyCells.length);
+                return emptyCells[randomIndex];
+            }
+            return null;
+        }
+
+        function computeSafetyMap() {
+            collisionMinDist = parseFloat(document.getElementById("collision-min-dist").value);
+            collisionMaxDist = parseFloat(document.getElementById("collision-max-dist").value);
+
+            // Compute safety cost for each cell and store it
+            for (let i = 0; i < gridSize.rows; i++) {
+                for (let j = 0; j < gridSize.columns; j++) {
+                    const cellId = `cell-${i}-${j}`;
+                    const cell = document.getElementById(cellId);
+                    const distanceToObstacle = computeDistanceToClosestObstacle(cell); // Implement this function
+                    const safety = computeSafetyCost(distanceToObstacle); // Use your safety cost function
+                    safetyCost[cellId] = safety;
+                }
+            }
+        }
+
+
+        // Precompute heuristics for all cells
+        function precomputeHeuristics() {
+            heuristicTable = {};
+            for (let i = 0; i < gridSize.rows; i++) {
+                for (let j = 0; j < gridSize.columns; j++) {
+                    for (let k = 0; k < 9; k++) {
+                        const cellId = `cell-${i}-${j}-${k}`;
+                        heuristicTable[cellId] = heuristic(document.getElementById(cellId), goalCell);
+                    }
+                }
+            }
+        }
+
+        function precomputeVelocityChanges() {
+            energyTable = [];
+            for (let i = 0; i < 9; i++) {
+                energyTable[i] = []; 
+                for (let j = 0; j < 9; j++) {
+                    energyTable[i][j] = calculateEnergyCost(i, j); 
+                }
+            }
+        }
+
+        precomputeVelocityChanges();
+
+
+        // Function to implement the MOAR algorithm and compute the path
+        function computeMOARPath() {
+            // Capture user input for k1, k2, k3
+            k1 = parseFloat(document.getElementById("k1").value);
+            k2 = parseFloat(document.getElementById("k2").value);
+            k3 = parseFloat(document.getElementById("k3").value);
+            if (!startCell || !goalCell) {
+                alert("Please define both start and goal positions.");
+                return;
+            }
+
+            const startCell3 = document.getElementById(startCell.id + "-0");
+            const goalCell3 = document.getElementById(goalCell.id + "-0");
+
+            const openSet = new PriorityQueue(); // Use a priority queue
+            openSet.enqueue(startCell3, 0); // Enqueue the start cell with a priority of 0
+
+            const cameFrom = {};
+            const gScore = {};
+            const fScore = {};
+            const closedList = [];
+
+            for (let i = 0; i < gridSize.rows; i++) {
+                for (let j = 0; j < gridSize.columns; j++) {
+                    for (let k = 0; k < 9; k++) {
+                        const cellId = `cell-${i}-${j}-${k}`;
+                        gScore[cellId] = Infinity;
+                        fScore[cellId] = Infinity;
+                        closedList[cellId] = false;
+                    }
+                }
+            }
+            startCell3.direction = 0;
+            gScore[startCell3.id] = 0;
+            fScore[startCell3.id] = heuristicTable[startCell3.id];// heuristic(startCell, goalCell);
+
+            while (!openSet.isEmpty()) {
+                const current = openSet.dequeue(); // Dequeue the cell with the lowest f-score
+                closedList[current.id] = true;
+
+                if (current === goalCell3) {
+                    reconstructPath3(cameFrom, current);
+                    return;
+                }
+                const neighbors = getNeighbors3(current);
+
+                for (const neighbor of neighbors) {
+                    if (closedList[neighbor.id]) {
+                        continue;
+                    }
+                    // Calculate the change in direction and energy cost based on your formula
+                    const energyCost = energyTable[current.direction][neighbor.direction];
+                    // const energyCost = energyTable[parseInt(current.id.split('-')[3])][neighbor.direction]; 
+                    // calculateEnergyCost(parseInt(current.id.split('-')[3]), neighbor.direction);
+                    let moveDistance;
+                    if (neighbor.direction === 0) {
+                        // No movement (Direction 0)
+                        moveDistance = 0;
+                    } else {
+                        moveDistance = neighbor.direction % 2 === 0 ? 1.41421356237 : 1;
+                    }
+
+                    // Calculate the tentative G score based on moveDistance
+                    const tentativeGScore = gScore[current.id] + k1 * safetyCost[neighbor.parentElement.id] + k2 * moveDistance + k3 * energyCost;
+                    if (tentativeGScore < gScore[neighbor.id]) {
+                        cameFrom[neighbor.id] = current;
+                        gScore[neighbor.id] = tentativeGScore;
+                        fScore[neighbor.id] = gScore[neighbor.id] + k2 * heuristicTable[neighbor.id];//* heuristic(neighbor, goalCell);
+
+                        if (!openSet.contains(neighbor)) {
+                            openSet.enqueue(neighbor, fScore[neighbor.id]); // Enqueue with the updated priority
+                        }
+                    }
+                }
+            }
+
+            alert("No path found");
+        }
+
+
+        function calculateEnergyCost(dir1, dir2) {
+            // Get the velocity changes for the current and neighbor cells
+            const currentVelocity = directionToVelocity[dir1];
+            const neighborVelocity = directionToVelocity[dir2];
+
+            // Calculate the change in velocity
+            const deltaVx = neighborVelocity.vx - currentVelocity.vx;
+            const deltaVy = neighborVelocity.vy - currentVelocity.vy;
+
+            // Calculate the magnitude of the change in velocity
+            const velocityChangeMagnitude = Math.sqrt(deltaVx * deltaVx + deltaVy * deltaVy);
+
+            // Return the energy cost, which is the normalized velocity change
+            return velocityChangeMagnitude / 2; // The maximum velocity change is 2
+        }
+
+        // Function to compute the distance to the closest obstacle (you need to implement this)
+        function computeDistanceToClosestObstacle(cell) {
+            const cellIndices = cell.id.split("-").slice(1); // Get the cell's row and column indices
+            const i = parseInt(cellIndices[0]);
+            const j = parseInt(cellIndices[1]);
+
+            const obstacleCells = document.getElementsByClassName("obstacle");
+
+            // Initialize variables to keep track of the closest obstacle distance and cell
+            let closestObstacleDistance = Infinity;
+
+            for (let k = 0; k < obstacleCells.length; k++) {
+                const obstacleCellIndices = obstacleCells[k].id.split("-").slice(1);
+                const oi = parseInt(obstacleCellIndices[0]);
+                const oj = parseInt(obstacleCellIndices[1]);
+
+                // Calculate the distance between the current cell and the obstacle cell
+                const distance = Math.sqrt((i - oi) ** 2 + (j - oj) ** 2);
+
+                // Update the closest obstacle distance if this obstacle is closer
+                if (distance < closestObstacleDistance) {
+                    closestObstacleDistance = distance;
+                }
+            }
+            return closestObstacleDistance;
+        }
+
+        // Function to compute safety cost based on distance
+        function computeSafetyCost(distanceToObstacle) {
+            if (distanceToObstacle > collisionMaxDist) {
+                return 0;
+            }
+
+            if (distanceToObstacle < collisionMinDist) {
+                return 1;
+            }
+
+            const l_scaling = collisionMinDist / (collisionMaxDist - collisionMinDist);
+
+            return l_scaling * (collisionMaxDist / distanceToObstacle - 1);
+        }
+
+        // Function to implement the A* algorithm and compute the path
+        function computeAStarPath() {
+            if (!startCell || !goalCell) {
+                alert("Please define both start and goal positions.");
+                return;
+            }
+
+            const openSet = [startCell];
+            const cameFrom = {};
+            const gScore = {};
+            const fScore = {};
+
+            for (let i = 0; i < gridSize.rows; i++) {
+                for (let j = 0; j < gridSize.columns; j++) {
+                    const cellId = `cell-${i}-${j}`;
+                    gScore[cellId] = Infinity;
+                    fScore[cellId] = Infinity;
+                }
+            }
+
+            gScore[startCell.id] = 0;
+            fScore[startCell.id] = heuristic(startCell, goalCell);
+
+            while (openSet.length > 0) {
+                openSet.sort((a, b) => fScore[a.id] - fScore[b.id]);
+                const current = openSet.shift();
+
+                if (current === goalCell) {
+                    reconstructPath(cameFrom, current);
+                    return;
+                }
+
+                const neighbors = getNeighbors(current);
+                for (const neighbor of neighbors) {
+
+                    // Calculate the distance between the current cell and the neighbor cell
+                    const dx = Math.abs(parseInt(current.id.split('-')[1]) - parseInt(neighbor.id.split('-')[1]));
+                    const dy = Math.abs(parseInt(current.id.split('-')[2]) - parseInt(neighbor.id.split('-')[2]));
+                    const moveDistance = Math.sqrt(dx * dx + dy * dy);
+
+                    // Calculate the tentative G score based on moveDistance
+                    const tentativeGScore = gScore[current.id] + moveDistance;
+
+                    if (tentativeGScore < gScore[neighbor.id]) {
+                        cameFrom[neighbor.id] = current;
+                        gScore[neighbor.id] = tentativeGScore;
+                        fScore[neighbor.id] = gScore[neighbor.id] + heuristic(neighbor, goalCell);
+
+                        if (!openSet.includes(neighbor)) {
+                            openSet.push(neighbor);
+                        }
+                    }
+                }
+            }
+
+            alert("No path found");
+        }
+
+        function heuristic(cell, goal) {
+            const cellPos = cell.id.split("-")[1].split('-'); 
+            const goalPos = goal.id.split("-")[1].split('-'); 
+
+            // Calculate the Manhattan distance
+            const dx = Math.abs(cellPos[0] - goalPos[0]);
+            const dy = Math.abs(cellPos[1] - goalPos[1]);
+
+            // Calculate the diagonal moves
+            const diagonalMoves = Math.min(dx, dy);
+
+            // Subtract the diagonal moves from the total distance
+            const manhattanDistance = dx + dy - 2 * diagonalMoves;
+
+            return manhattanDistance;
+        }
+
+        function getNeighbors3(cell3) {
+            const cellIndices = cell3.id.split("-").slice(1); 
+
+            const neighbors = [];
+
+            const i = parseInt(cellIndices[0]);
+            const j = parseInt(cellIndices[1]);
+            const k = parseInt(cellIndices[2]);
+
+            // Define possible neighboring positions
+            const positions = [
+                [i, j, 0], // Self
+                [i, j - 1, 1], // N
+                [i + 1, j - 1, 2], // NE
+                [i + 1, j, 3], // E
+                [i + 1, j + 1, 4], // SE
+                [i, j + 1, 5], // S
+                [i - 1, j + 1, 6], // SW
+                [i - 1, j, 7], // W
+                [i - 1, j - 1, 8], // NW
+            ];
+
+            for (const pos of positions) {
+                const neighborId = `cell-${pos[0]}-${pos[1]}`;
+                const neighbor = document.getElementById(neighborId);
+                
+                if (neighbor && !neighbor.classList.contains("obstacle")) {
+                    const neighborId3 = `cell-${pos[0]}-${pos[1]}-${pos[2]}`;
+                    const neighbor3 = document.getElementById(neighborId3);
+                    if (neighbor3) {
+                        // Add a "direction" attribute to the neighbor3 object
+                        neighbor3.direction = pos[2];
+                        neighbors.push(neighbor3);
+                    }
+                }
+            }
+
+            return neighbors;
+        }
+
+
+        function getNeighbors(cell) {
+            const cellIndices = cell.id.split("-").slice(1); // Change to slice(1) for 'i' and 'j'
+            const neighbors = [];
+
+            const i = parseInt(cellIndices[0]);
+            const j = parseInt(cellIndices[1]);
+
+            // Define possible neighboring positions
+            const positions = [
+                [i - 1, j], // Top
+                [i + 1, j], // Bottom
+                [i, j - 1], // Left
+                [i, j + 1], // Right
+                [i - 1, j - 1], // Top Left
+                [i - 1, j + 1], // Top right
+                [i + 1, j - 1], // Bottom Left
+                [i + 1, j + 1], // Bottom Right
+            ];
+
+            for (const pos of positions) {
+                const neighborId = `cell-${pos[0]}-${pos[1]}`;
+                const neighbor = document.getElementById(neighborId);
+                
+                if (neighbor && !neighbor.classList.contains("obstacle")) {
+                    neighbors.push(neighbor);
+                }
+            }
+
+            return neighbors;
+        }
+
+        function reconstructPath3(cameFrom, current) {
+            const path = [current];
+
+            while (cameFrom[current.id]) {
+                current = cameFrom[current.id];
+                path.unshift(current);
+            }
+
+            for (let i = 1; i < path.length - 2; i++) {
+                const cell = path[i].parentElement;
+                cell.classList.add("path");
+            }
+        }
+
+
+        function reconstructPath(cameFrom, current) {
+            const path = [current];
+
+            while (cameFrom[current.id]) {
+                current = cameFrom[current.id];
+                path.unshift(current);
+            }
+
+            for (let i = 1; i < path.length - 1; i++) {
+                const cell = path[i];
+                cell.classList.add("path");
+            }
+        }
+    </script>
+</body>
+</html>
