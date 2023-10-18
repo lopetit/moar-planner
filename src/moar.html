@@ -118,7 +118,7 @@
     
     <div class="grid-container">
         <div id="map">
-        <!-- Your grid will be dynamically created here. -->
+        <!-- The grid will be dynamically created here. -->
         </div>
     </div>
     
@@ -293,7 +293,6 @@
             }
             togglePath.isShown = false;
 
-            // Implement the selected path planner
             const selectedPlanner = document.getElementById("path-planner").value;
             if (selectedPlanner === "astar") {
                 // Call the A* path planner function
@@ -522,8 +521,8 @@
                 for (let j = 0; j < gridSize.columns; j++) {
                     const cellId = `cell-${i}-${j}`;
                     const cell = document.getElementById(cellId);
-                    const distanceToObstacle = computeDistanceToClosestObstacle(cell); // Implement this function
-                    const safety = computeSafetyCost(distanceToObstacle); // Use your safety cost function
+                    const distanceToObstacle = computeDistanceToClosestObstacle(cell);
+                    const safety = computeSafetyCost(distanceToObstacle); 
                     safetyCost[cellId] = safety;
                 }
             }
@@ -606,10 +605,8 @@
                     if (closedList[neighbor.id]) {
                         continue;
                     }
-                    // Calculate the change in direction and energy cost based on your formula
+                
                     const energyCost = energyTable[current.direction][neighbor.direction];
-                    // const energyCost = energyTable[parseInt(current.id.split('-')[3])][neighbor.direction]; 
-                    // calculateEnergyCost(parseInt(current.id.split('-')[3]), neighbor.direction);
                     let moveDistance;
                     if (neighbor.direction === 0) {
                         // No movement (Direction 0)
@@ -652,7 +649,7 @@
             return velocityChangeMagnitude / 2; // The maximum velocity change is 2
         }
 
-        // Function to compute the distance to the closest obstacle (you need to implement this)
+        // Function to compute the distance to the closest obstacle
         function computeDistanceToClosestObstacle(cell) {
             const cellIndices = cell.id.split("-").slice(1); // Get the cell's row and column indices
             const i = parseInt(cellIndices[0]);
