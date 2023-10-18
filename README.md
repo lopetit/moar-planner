@@ -4,7 +4,7 @@ The problem of autonomous navigation for UAV inspection remains challenging as i
 
 A video showing functionalities of MOAR Planner is coming soon.
 
-Demo available [here](https://edu.louispetit.be).
+Demo available [here](https://edu.louispetit.be/demo/moar-planner).
 
 <p align="center">
   <img src="method.png" alt="Method" width="70%"/>
