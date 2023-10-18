@@ -7,7 +7,7 @@ A video showing functionalities of MOAR Planner is coming soon.
 Demo available [here](https://edu.louispetit.be/demo/moar-planner).
 
 <p align="center">
-  <img src="method.png" alt="Method" width="70%"/>
+  <img src="img/method.png" alt="Method" width="70%"/>
 </p>
 
 ## Reference
