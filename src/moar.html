@@ -2,9 +2,11 @@
 <html>
 <head>
     <title>Path Planning Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-         /* Center the content vertically and horizontally */
-         body {
+    
+        /* Center the content vertically and horizontally */
+        body {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -19,6 +21,13 @@
             gap: 10px; /* Adjust the gap between buttons as needed */
         }
 
+        .slider-container {
+            display: flex;
+            margin-top: 10px; /* Set the vertical gap after the container */
+            gap: 10px; /* Adjust the gap between buttons as needed */
+        }
+
+
         .grid-container {
             margin-top: 10px; /* Set the vertical gap after the container */
             width: 100%; /* Set a specific width or a percentage as needed */
@@ -29,6 +38,10 @@
 
         .row {
             white-space: nowrap; /* Prevent cells from wrapping to the next line */
+        }
+
+        .mobile-slider-style {
+            width: 100px; /* Adjust the width as needed */
         }
 
         .cell {
@@ -49,69 +62,87 @@
         .path {
             background-color: rgb(136, 174, 255);
         }
+        @media (max-width: 800px) {
+            .mobile-slider-style {
+                font-size: 10px; /* Adjust the font size as needed */
+                width: 70px; /* Adjust the width as needed */
+                height: 20px; /* Adjust the height as needed */
+            }
+        }
+        @media (max-width: 500px) {
+            .cell {
+                width: 5px;
+                height: 5px;
+                border: 1px solid #ccc;
+                display: inline-block; 
+            }
+            .slider-container {
+                flex-direction: column;
+            }
+
+            .mobile-style {
+               /*  font-size: 12px; /* Adjust the font size as needed */
+                /*width: 100px; /* Adjust the width as needed */
+                /* height: 30px; /* Adjust the height as needed */ 
+            }
+
+            .mobile-slider-style {
+                font-size: 10px; /* Adjust the font size as needed */
+                width: 70px; /* Adjust the width as needed */
+                height: 20px; /* Adjust the height as needed */
+            }
+
+
+            body {
+                height: 200vh;
+            }
+
+        }
     </style>
+    
+
 </head>
 <body>
-    <!--  <h1>Path Planning</h1>  -->
-    <!-- Container for buttons with the ID 'button-container' -->
-    <div class="button-container">
-        <label for="row-count">Rows:</label>
-        <input type="range" id="row-count" min="1" max="40" value="20">
-        <span id="row-value">20</span>
-        
-        <label for="column-count">Columns:</label>
-        <input type="range" id="column-count" min="1" max="80" value="60">
-        <span id="column-value">60</span>
-
-        <button id="create-grid">Create Grid</button>
-    </div>
-    
-    <div class="button-container">
-        <label for="obstacle-count">Obstacles:</label>
-        <input type="range" id="obstacle-count" min="1" max="400" value="60">
-        <span id="obstacle-value">60</span>
-
-        <button id="add-obstacles">Add Obstacles</button>
-    </div>
-    
-    
-    <div class="button-container">
-        <button id="reset">Reset</button>
-        <button id="define-start">Set Start</button>
-        <button id="define-goal">Set Goal</button>
-    </div>
 
      <!-- Dropdown menu for path planner selection -->
-     <div class="button-container">
+     <div class="button-container" id="planner-container">
+        <button id="define-start" class="mobile-style">Set Start</button>
+        <button id="define-goal" class="mobile-style">Set Goal</button>
         <select id="path-planner">
             <option value="moar-planner">MOAR Planner</option>
             <option value="astar">A*</option>
         </select>
-        <button id="compute">Compute Path</button>
+        <button id="compute" class="mobile-style">Compute Path</button>
     </div>
 
-    <div class="button-container" id="moar-costs-container">
+    <div class="slider-container" id="moar-costs-container">
         <label for="k1">k1 (Safety):</label>
-        <input type="range" id="k1" min="0" max="1" step="0.05" value="0.44">
+        <input type="range" id="k1" class="mobile-slider-style" min="0" max="1" step="0.05" value="0.44">
         <span id="k1-value">0.44</span>
+        <span style="padding-right: 10px;"> </span>
+
 
         <label for="k2">k2 (Time):</label>
-        <input type="range" id="k2" min="0" max="1" step="0.05" value="0.28">
+        <input type="range" id="k2" class="mobile-slider-style" min="0" max="1" step="0.05" value="0.28">
         <span id="k2-value">0.28</span>
+        <span style="padding-right: 10px;"> </span>
 
         <label for="k3">k3 (Energy):</label>
-        <input type="range" id="k3" min="0" max="1" step="0.05" value="0.28">
+        <input type="range" id="k3" class="mobile-slider-style" min="0" max="1" step="0.05" value="0.28">
         <span id="k3-value">0.28</span>
+        <span style="padding-right: 10px;"> </span>
     </div>
 
     <div class="button-container" id="moar-safety-container"> 
         <label for="collision-min-dist">Collision Min. Dist.:</label>
-        <input type="range" id="collision-min-dist" min="0" max="10" step="0.5" value="1">
+        <input type="range" id="collision-min-dist" class="mobile-slider-style" min="0" max="10" step="0.5" value="1">
         <span id="collision-min-dist-value">1</span>
+        <span style="padding-right: 10px;"> </span>
 
         <label for="collision-max-dist">Collision Max. Dist.:</label>
-        <input type="range" id="collision-max-dist" min="0" max="20" step="0.5" value="5">
+        <input type="range" id="collision-max-dist" class="mobile-slider-style" min="0" max="20" step="0.5" value="5">
         <span id="collision-max-dist-value">5</span>
+        <span style="padding-right: 10px;"> </span>
 
         <button id="toggle-safety-cost">Toggle Safety Map</button>
     </div>
@@ -120,6 +151,32 @@
         <div id="map">
         <!-- The grid will be dynamically created here. -->
         </div>
+    </div>
+
+     <!-- Container for buttons with the ID 'button-container' -->
+     <div class="button-container" id="grid-container">
+        <label for="row-count">Rows:</label>
+        <input type="range" id="row-count" class="mobile-slider-style" min="1" max="80" value="30">
+        <span id="row-value">30</span>
+        <span style="padding-right: 10px;"> </span>
+        
+        <label for="column-count">Columns:</label>
+        <input type="range" id="column-count" class="mobile-slider-style" min="1" max="80" value="40">
+        <span id="column-value">40</span>
+        <span style="padding-right: 10px;"> </span>
+
+        <button id="create-grid" class="mobile-style">Create Grid</button>
+    </div>
+    
+    <div class="button-container" id="obstacles-container">
+        <label for="obstacle-count">Obstacles:</label>
+        <input type="range" id="obstacle-count" class="mobile-slider-style" min="1" max="400" value="80">
+        <span id="obstacle-value">80</span>
+        <span style="padding-right: 10px;"> </span>
+
+        <button id="add-obstacles" class="mobile-style">Add Obstacles</button>
+
+        <button id="reset" class="mobile-style">Reset</button>
     </div>
     
     <script>
@@ -191,13 +248,24 @@
             7: { vx: -1, vy: 0 }, // W
             8: { vx: -0.70710678118, vy: -0.70710678118 }, // NW
         };
+
+        const moarCostContainer = document.getElementById("moar-costs-container");
+        const moarSafetyContainer = document.getElementById("moar-safety-container");
+        const gridContainer = document.getElementById("grid-container");
+        const obstaclesContainer = document.getElementById("obstacles-container");
+        const plannerContainer = document.getElementById("planner-container");
+
+        moarCostContainer.style.display = "block";
+        moarSafetyContainer.style.display = "block";
+        gridContainer.style.display = "block";
+        obstaclesContainer.style.display = "block";
+        plannerContainer.style.display = "block";
         
 
         // Add an event listener to the path planner dropdown
         document.getElementById("path-planner").addEventListener("change", function () {
             const selectedPlanner = this.value;
-            const moarCostContainer = document.getElementById("moar-costs-container");
-            const moarSafetyContainer = document.getElementById("moar-safety-container");
+            
 
             if (selectedPlanner === "moar-planner") {
                 // If MOAR Planner is selected, show the buttons
@@ -228,6 +296,14 @@
 
             gridSize = { rows: rowCount, columns: columnCount };
 
+            // Calculate the width of each cell based on the screen width
+            const cellWidth = Math.floor(window.innerWidth * 0.75 / gridSize.columns);
+
+            // Calculate the height of each cell based on the screen height
+            const cellHeight = Math.floor((window.innerHeight * 0.5 ) / gridSize.rows);
+
+            const cellLength = Math.min(cellWidth, cellHeight);
+
             // Remove the existing grid
             document.getElementById("map").innerHTML = '';
 
@@ -239,6 +315,8 @@
                     const cell = document.createElement("div");
                     cell.classList.add("cell");
                     cell.id = `cell-${i}-${j}`;
+                    cell.style.width = `${cellLength}px`;
+                    cell.style.height = `${cellLength}px`;
                     row.appendChild(cell);
 
                     for (let k = 0; k < 9; k++) {
@@ -553,6 +631,16 @@
         }
 
         precomputeVelocityChanges();
+        const button0 = document.getElementById("create-grid");
+        button0.click();
+        const button1 = document.getElementById("add-obstacles");
+        button1.click();
+        const button2 = document.getElementById("define-start");
+        button2.click();
+        const button3 = document.getElementById("define-goal");
+        button3.click();
+        const button4 = document.getElementById("compute");
+        button4.click();
 
 
         // Function to implement the MOAR algorithm and compute the path
